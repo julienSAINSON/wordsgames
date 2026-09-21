@@ -1,0 +1,271 @@
+const width = 960;
+const height = 560;
+
+function distance(first, second) {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextWord, onSelectLevel, soundService, spatialAudio }) {
+  let screen;
+  let canvas;
+  let context;
+  let frame;
+  let lastTime;
+  let active = true;
+  let world;
+  let ship;
+  let base;
+  let stones = [];
+  let attachedStone;
+  let collectedLetters = [];
+  let cameraX = 0;
+  const keys = new Set();
+  const timers = new Set();
+
+  function schedule(callback, delay) {
+    const timer = window.setTimeout(() => { timers.delete(timer); callback(); }, delay);
+    timers.add(timer);
+  }
+
+  function feedback(message, className = "") {
+    const element = screen.querySelector("[data-space-feedback]");
+    element.className = `feedback ${className}`;
+    element.textContent = message;
+  }
+
+  function renderStatus(result = session.getState()) {
+    screen.querySelector("[data-space-slots]").innerHTML = Array.from({ length: result.wordLength }, (_, index) =>
+      `<span class="word-slot">${collectedLetters[index] ?? ""}</span>`).join("");
+    screen.querySelector("[data-space-errors]").textContent = `${result.errorsRemaining} erreur(s) restante(s)`;
+  }
+
+  function createStones() {
+    const proposals = session.createLetterProposals(spaceRules.stoneCount);
+    stones = proposals.map((proposal, index) => ({
+      ...proposal,
+      x: base.x + (index % 2 === 0 ? -1 : 1) * (210 + Math.floor(index / 2) * spaceRules.stoneSpacing),
+      y: 285 + ((index * 73) % 160),
+      radius: 31,
+      attached: false,
+    }));
+  }
+
+  function resetMissionStage() {
+    createStones();
+    attachedStone = undefined;
+  }
+
+  function setGrapple() {
+    if (!active) return;
+    if (attachedStone) {
+      attachedStone.attached = false;
+      attachedStone = undefined;
+      feedback("Pierre relachee.");
+      return;
+    }
+    const nearest = stones.find((stone) => distance(ship, stone) < spaceRules.grappleRange);
+    if (nearest) {
+      nearest.attached = true;
+      attachedStone = nearest;
+      feedback("Pierre accrochee. Ramene-la a la base.", "feedback--success");
+      soundService.playPop();
+    } else {
+      feedback("Approche-toi d'une pierre pour accrocher le grappin.");
+    }
+  }
+
+  function depositStone() {
+    if (!attachedStone || distance(ship, base) > base.radius + 55) return;
+    const stone = attachedStone;
+    stones = stones.filter((item) => item !== stone);
+    attachedStone = undefined;
+    const result = session.submitLetter(stone.value);
+    if (result.correct) {
+      collectedLetters.push(stone.value);
+      feedback(result.completed ? "Mission reussie !" : "Pierre acceptee. Nouvelle extraction.", "feedback--success");
+      soundService.playSuccess();
+    } else {
+      feedback("Pierre rejetee. Cherche une autre lettre.", "feedback--error");
+      soundService.playError();
+    }
+    renderStatus(result);
+    if (result.completed || result.failed) {
+      active = false;
+      finish(result);
+      const button = screen.querySelector(result.completed ? "[data-space-next]" : "[data-space-restart]");
+      button.hidden = false;
+      button.disabled = true;
+      schedule(() => { button.disabled = false; }, 1200);
+    } else {
+      schedule(resetMissionStage, 520);
+    }
+  }
+
+  function update(delta) {
+    if (!active) return;
+    if (keys.has("ArrowLeft")) ship.angle -= spaceRules.rotationSpeed * delta;
+    if (keys.has("ArrowRight")) ship.angle += spaceRules.rotationSpeed * delta;
+    if (keys.has("ArrowUp") || keys.has(" ")) {
+      ship.vx += Math.cos(ship.angle) * spaceRules.thrust * delta;
+      ship.vy += Math.sin(ship.angle) * spaceRules.thrust * delta;
+    }
+    ship.vy += spaceRules.gravity * delta;
+    ship.vx *= 0.992;
+    ship.vy *= 0.992;
+    ship.x = clamp(ship.x + ship.vx * delta, 25, world.width - 25);
+    ship.y = clamp(ship.y + ship.vy * delta, 60, height - 65);
+    if (attachedStone) {
+      const ropeLength = 58;
+      attachedStone.x = ship.x - Math.cos(ship.angle) * ropeLength;
+      attachedStone.y = ship.y - Math.sin(ship.angle) * ropeLength;
+    }
+    if (attachedStone) depositStone();
+    cameraX = clamp(ship.x - width * 0.4, 0, world.width - width);
+    spatialAudio.announce({ distance: distance(ship, base), maximumDistance: world.width * 0.62 });
+  }
+
+  function drawWorld(time) {
+    const sky = context.createLinearGradient(0, 0, 0, height);
+    sky.addColorStop(0, "#0a1633");
+    sky.addColorStop(0.7, "#1e3154");
+    sky.addColorStop(1, "#372950");
+    context.fillStyle = sky;
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#f7e8a5";
+    for (let index = 0; index < 80; index += 1) context.fillRect((index * 109 - cameraX * 0.25) % width, (index * 47) % 340, 2, 2);
+    context.fillStyle = "#563e52";
+    context.beginPath();
+    context.moveTo(0, height);
+    for (let x = 0; x <= width; x += 38) context.lineTo(x, height - 75 - Math.sin((x + cameraX) / 95) * 28);
+    context.lineTo(width, height);
+    context.fill();
+    context.save();
+    context.translate(-cameraX, 0);
+    context.fillStyle = "#80d7e6";
+    context.fillRect(base.x - 48, base.y - 38, 96, 45);
+    context.fillStyle = "#e7f4f5";
+    context.fillRect(base.x - 22, base.y - 68, 44, 32);
+    context.fillStyle = "#9bedc8";
+    context.beginPath();
+    context.arc(base.x, base.y - 38, base.radius, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#172027";
+    context.font = "800 15px Trebuchet MS, sans-serif";
+    context.textAlign = "center";
+    context.fillText("BASE", base.x, base.y + 30);
+    stones.forEach((stone) => {
+      context.fillStyle = "#a78d85";
+      context.beginPath();
+      context.arc(stone.x, stone.y, stone.radius, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "#e9d8c9";
+      context.lineWidth = 3;
+      context.stroke();
+      context.fillStyle = "#fffdf2";
+      context.font = "800 29px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(stone.value, stone.x, stone.y + 2);
+    });
+    if (attachedStone) {
+      context.strokeStyle = "#f5d975";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(ship.x, ship.y);
+      context.lineTo(attachedStone.x, attachedStone.y);
+      context.stroke();
+    }
+    context.save();
+    context.translate(ship.x, ship.y);
+    context.rotate(ship.angle);
+    context.fillStyle = "#f05f61";
+    context.beginPath();
+    context.moveTo(27, 0);
+    context.lineTo(-20, -18);
+    context.lineTo(-12, 0);
+    context.lineTo(-20, 18);
+    context.closePath();
+    context.fill();
+    context.fillStyle = "#bfeef4";
+    context.fillRect(-8, -7, 18, 14);
+    context.restore();
+    context.restore();
+    if (!active) {
+      context.fillStyle = "rgba(8,17,40,0.72)";
+      context.fillRect(0, 0, width, height);
+      context.fillStyle = "#fffdf2";
+      context.font = "800 52px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
+      context.textAlign = "center";
+      context.fillText(session.getState().completed ? "MISSION REUSSIE" : "MISSION ECHOUEE", width / 2, height / 2);
+    }
+  }
+
+  function render(time) {
+    const delta = Math.min((time - (lastTime ?? time)) / 1000, 0.05);
+    lastTime = time;
+    update(delta);
+    drawWorld(time);
+    frame = requestAnimationFrame(render);
+  }
+
+  function onKeyDown(event) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", " "].includes(event.key)) {
+      event.preventDefault();
+      keys.add(event.key);
+    }
+    if (event.key.toLowerCase() === "g") setGrapple();
+  }
+
+  function onKeyUp(event) {
+    keys.delete(event.key);
+  }
+
+  return Object.freeze({
+    mount(container) {
+      world = { width: spaceRules.worldWidth };
+      base = { x: world.width / 2, y: height - 120, radius: 34 };
+      ship = { x: base.x + 120, y: height - 200, vx: 0, vy: 0, angle: Math.PI };
+      screen = document.createElement("section");
+      screen.className = "section-stack space-screen";
+      screen.innerHTML = `
+        <section class="space-panel"><div class="panel-heading"><div><p class="eyebrow">Exploration spatiale</p><h2>Pilote, attrape, rapporte</h2></div><button class="action-button" type="button" data-space-repeat>Reecouter</button></div><div class="session-status"><span class="status-chip" data-space-errors></span></div><div class="word-slots" data-space-slots aria-label="Lettres deposees"></div><canvas class="space-canvas" width="960" height="560" aria-label="Planete et vaisseau spatial"></canvas><div class="space-controls"><button type="button" data-space-left>Tourner a gauche</button><button type="button" data-space-thrust>Propulser</button><button type="button" data-space-right>Tourner a droite</button><button type="button" data-space-grapple>Grappin</button></div><p class="feedback" data-space-feedback></p><div class="space-actions"><button class="action-button" type="button" data-space-next hidden>Mot suivant</button><button class="action-button" type="button" data-space-restart hidden>Reessayer</button></div></section>
+        <section class="space-debug"><p class="eyebrow">Mode developpeur</p><div class="space-levels"><button type="button" data-space-level="1">Niveau 1</button><button type="button" data-space-level="2">Niveau 2</button><button type="button" data-space-level="3">Niveau 3</button></div></section>`;
+      container.append(screen);
+      canvas = screen.querySelector("canvas");
+      context = canvas.getContext("2d");
+      screen.querySelector("[data-space-repeat]").addEventListener("click", repeatWord);
+      screen.querySelector("[data-space-next]").addEventListener("click", nextWord);
+      screen.querySelector("[data-space-restart]").addEventListener("click", nextWord);
+      screen.querySelector("[data-space-grapple]").addEventListener("click", setGrapple);
+      screen.querySelectorAll("[data-space-level]").forEach((button) => button.addEventListener("click", () => onSelectLevel(Number(button.dataset.spaceLevel))));
+      [["[data-space-left]", "ArrowLeft"], ["[data-space-thrust]", "ArrowUp"], ["[data-space-right]", "ArrowRight"]].forEach(([selector, key]) => {
+        const button = screen.querySelector(selector);
+        button.addEventListener("pointerdown", () => keys.add(key));
+        button.addEventListener("pointerup", () => keys.delete(key));
+        button.addEventListener("pointerleave", () => keys.delete(key));
+      });
+      window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("keyup", onKeyUp);
+      renderStatus();
+      createStones();
+      frame = requestAnimationFrame(render);
+    },
+    destroy() {
+      active = false;
+      spatialAudio.stop();
+      window.cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers.clear();
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      keys.clear();
+      screen?.remove();
+      canvas = undefined;
+      context = undefined;
+    },
+  });
+}

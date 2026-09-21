@@ -1,0 +1,36 @@
+{
+  "children": [
+    {
+      "id": "milo",
+      "name": "Milo",
+      "series": [
+        {
+          "id": "serie-a",
+          "title": "Série A",
+          "words": ["CHAT", "LUNE", "PAPA", "MAMAN"]
+        },
+        {
+          "id": "serie-b",
+          "title": "Série B",
+          "words": ["MAISON", "BATEAU", "SOLEIL"]
+        }
+      ]
+    },
+    {
+      "id": "irina",
+      "name": "Irina",
+      "series": [
+        {
+          "id": "serie-a",
+          "title": "Série A",
+          "words": ["LAPIN", "FLEUR", "NUAGE"]
+        },
+        {
+          "id": "serie-b",
+          "title": "Série B",
+          "words": ["POMME", "TRAIN", "ETOILE"]
+        }
+      ]
+    }
+  ]
+}

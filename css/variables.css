@@ -1,0 +1,11 @@
+:root {
+  --ink: #172027;
+  --paper: #f5f0e5;
+  --sun: #f5c75d;
+  --sky: #9ad7db;
+  --leaf: #5b8464;
+  --coral: #d6674c;
+  --line: #172027;
+  --radius: 8px;
+  --shadow: 5px 5px 0 var(--line);
+}
