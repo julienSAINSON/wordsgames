@@ -21,9 +21,9 @@
       "name": "Irina",
       "series": [
         {
-          "id": "serie-a",
+          "id": "historien",
           "title": "Série A",
-          "words": ["LAPIN", "FLEUR", "NUAGE"]
+          "words": ["un an","une ére","une époque","une pierre","un côté","l’est","l’ouest","le nord","un bloc","une allée","un mètre","la longueur","la largeur","un historien","une tombe","la terre","l’origine","un monument","un curieux","une année","la construction","se dresser","s’aligner","penser","attirer","protéger","lointain","lointaine","rocheux","rocheuse","haut","haute","collectif","collective","impressionnant","depuis","avant","certainement","environ","maintenant"]
         },
         {
           "id": "serie-b",
