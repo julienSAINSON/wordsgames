@@ -22,13 +22,13 @@
       "series": [
         {
           "id": "historien",
-          "title": "Série A",
+          "title": "Historien",
           "words": ["un an","une ére","une époque","une pierre","un côté","l’est","l’ouest","le nord","un bloc","une allée","un mètre","la longueur","la largeur","un historien","une tombe","la terre","l’origine","un monument","un curieux","une année","la construction","se dresser","s’aligner","penser","attirer","protéger","lointain","lointaine","rocheux","rocheuse","haut","haute","collectif","collective","impressionnant","depuis","avant","certainement","environ","maintenant"]
         },
         {
           "id": "serie-b",
-          "title": "Série B",
-          "words": ["POMME", "TRAIN", "ETOILE"]
+          "title": "dictée 3",
+          "words": ["l’histoire", "l’écriture", "une invention", "une connaissance", "une génération", "un humain", "un outil", "le début", "une chose", "le dessin", "la pensée", "une lettre", "un signe", "un alphabet", "une inscription", "la pierre", "une tablette", "le siècle", "le papier", "permettre", "compter", "communiquer", "transmettre", "réussir", "connaître", "représenter", "exprimer", "attendre", "écrire", "suivant/suivante", "essentiel", "abstrait", "d’abord", "plusieurs", "ensuite", "mais", "beaucoup", "plus", "tard", "comme", "d’abord", "puis", "plusieurs", "ensuite"]
         }
       ]
     }

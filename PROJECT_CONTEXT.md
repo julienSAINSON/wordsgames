@@ -28,7 +28,7 @@ Atelier des mots est une application web educative pour entrainer des enfants a 
 
 ### ExerciseSession
 
-`createExerciseSession(exercise, eventBus)` garde le mot prive. Il expose `start()`, `getState()`, `submitLetter(letter)` et `createLetterProposals(laneCount)`. Cette derniere methode retourne une liste melangee de `{ id, value }` contenant une seule reponse correcte, sans la marquer ni reveler le mot. Les resultats contiennent `correct`, `errorsRemaining`, `validatedLetters`, `completed`, `failed` et `accepted`, jamais la prochaine lettre ni le mot.
+`createExerciseSession(exercise, eventBus)` garde le mot prive. Il expose `start()`, `getState()`, `submitLetter(letter)`, `fail(reason)`, `createLetterProposals(laneCount)` et `createLetterField(distractorCount)`. Cette derniere methode retourne une liste melangee de `{ id, value }` qui contient toutes les occurrences des lettres du mot, doublons inclus, completees par des intrus et sans indiquer l'ordre ni la prochaine reponse. `fail(reason)` permet a une regle de jeu de terminer une session en echec, par exemple a l'expiration d'un minuteur. Les resultats contiennent `correct`, `errorsRemaining`, `validatedLetters`, `completed`, `failed` et `accepted`, jamais la prochaine lettre ni le mot.
 
 ### ExerciseEngine
 
@@ -76,7 +76,7 @@ Un coureur Canvas avance automatiquement vers une haie. Dans une fenetre d'appro
 
 ### Exploration spatiale
 
-Un MVP Canvas place un vaisseau inertiel sur une planete plus large que l'ecran. Le joueur tourne, propulse et doit se trouver pres d'une pierre puis taper au clavier la lettre affichee pour l'accrocher; elle reste visuellement reliee au vaisseau jusqu'a son depot reel dans la base. Seul ce depot appelle `session.submitLetter(value)`. Les pierres sont regenerees par etape avec des propositions opaques, reparties alternativement a gauche et a droite de la station. La base affiche uniquement les emplacements et utilise la regle centrale d'erreurs. L'issue revele le mot au niveau du controleur, jamais dans le jeu. L'alarme periodique prononce uniquement le mot, avec un volume qui diminue selon la distance de la base.
+Un MVP Canvas place un vaisseau inertiel sur une planete plus large que l'ecran. Le joueur tourne, propulse avec la fleche haut et doit se trouver pres d'une pierre puis taper au clavier la lettre affichee pour l'accrocher; elle reste visuellement reliee au vaisseau jusqu'a son depot reel dans la base. Une pierre espace affiche `ESPACE` et se capture avec la barre espace. Pres de la base, il doit retaper cette meme lettre pour la deposer; toute autre touche conserve la pierre attachee et declenche un signal sonore. Si la pierre deposee ne correspond pas a la prochaine lettre du mot, elle revient a son emplacement initial au lieu de disparaitre. Seul ce depot appelle `session.submitLetter(value)`. Toutes les pierres, composees de chaque lettre du mot et d'intrus, sont presentes des le depart; les doublons sont conserves. Les emplacements remplis du mot et le minuteur de deux minutes sont affiches dans le canvas. A son expiration, la station explose entierement avant que la session echoue et que le controleur revele le mot complet. La base utilise la regle centrale d'erreurs. L'issue revele le mot au niveau du controleur, jamais dans le jeu. L'alarme periodique prononce uniquement le mot, avec un volume qui diminue selon la distance de la base.
 
 ## 6. Niveaux de difficulte
 

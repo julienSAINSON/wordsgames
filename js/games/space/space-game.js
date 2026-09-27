@@ -9,6 +9,10 @@ function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function displayStoneValue(value) {
+  return value === " " ? "ESPACE" : value;
+}
+
 export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextWord, onSelectLevel, soundService, spatialAudio }) {
   let screen;
   let canvas;
@@ -21,6 +25,9 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
   let base;
   let stones = [];
   let attachedStone;
+  let deadline;
+  let stationExploded = false;
+  let explosionStartedAt;
   let collectedLetters = [];
   let cameraX = 0;
   const keys = new Set();
@@ -38,31 +45,46 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
   }
 
   function renderStatus(result = session.getState()) {
-    screen.querySelector("[data-space-slots]").innerHTML = Array.from({ length: result.wordLength }, (_, index) =>
-      `<span class="word-slot">${collectedLetters[index] ?? ""}</span>`).join("");
     screen.querySelector("[data-space-errors]").textContent = `${result.errorsRemaining} erreur(s) restante(s)`;
   }
 
-  function createStones() {
-    const proposals = session.createLetterProposals(spaceRules.stoneCount);
-    stones = proposals.map((proposal, index) => ({
-      ...proposal,
-      x: base.x + (index % 2 === 0 ? -1 : 1) * (210 + Math.floor(index / 2) * spaceRules.stoneSpacing),
-      y: 285 + ((index * 73) % 160),
-      radius: 31,
-      attached: false,
-    }));
+  function getRemainingTime() {
+    const remainingSeconds = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = String(remainingSeconds % 60).padStart(2, "0");
+    return `${minutes}:${seconds}`;
   }
 
-  function resetMissionStage() {
-    createStones();
-    attachedStone = undefined;
+  function createStones() {
+    const proposals = session.createLetterField(spaceRules.stoneCount);
+    const columns = Math.ceil(Math.sqrt(proposals.length));
+    const rows = Math.ceil(proposals.length / columns);
+    stones = proposals.map((proposal, index) => {
+      const x = 100 + (index % columns) * ((world.width - 200) / Math.max(1, columns - 1));
+      const y = 150 + Math.floor(index / columns) * (280 / Math.max(1, rows - 1));
+      return {
+        ...proposal,
+        x,
+        y,
+        homeX: x,
+        homeY: y,
+        radius: 31,
+        attached: false,
+      };
+    });
   }
 
   function captureStone(letter) {
     if (!active) return;
     if (attachedStone) {
-      feedback("Ramene la pierre a la base.");
+      if (distance(ship, base) > base.radius + 55) {
+        feedback("Ramene la pierre a la base.");
+      } else if (letter === attachedStone.value) {
+        depositStone();
+      } else {
+        feedback("Tape la lettre de la pierre pour la deposer.", "feedback--error");
+        soundService.playError();
+      }
       return;
     }
     const nearbyStones = stones.filter((stone) => distance(ship, stone) < spaceRules.grappleRange);
@@ -82,35 +104,60 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
   function depositStone() {
     if (!attachedStone || distance(ship, base) > base.radius + 55) return;
     const stone = attachedStone;
-    stones = stones.filter((item) => item !== stone);
     attachedStone = undefined;
     const result = session.submitLetter(stone.value);
     if (result.correct) {
+      stones = stones.filter((item) => item !== stone);
       collectedLetters.push(stone.value);
       feedback(result.completed ? "Mission reussie !" : "Pierre acceptee. Nouvelle extraction.", "feedback--success");
       soundService.playSuccess();
     } else {
-      feedback("Pierre rejetee. Cherche une autre lettre.", "feedback--error");
+      stone.attached = false;
+      stone.x = stone.homeX;
+      stone.y = stone.homeY;
+      feedback("Pierre rejetee. Elle reste disponible.", "feedback--error");
       soundService.playError();
     }
     renderStatus(result);
     if (result.completed || result.failed) {
       active = false;
+      spatialAudio.stop();
       finish(result);
       const button = screen.querySelector(result.completed ? "[data-space-next]" : "[data-space-restart]");
       button.hidden = false;
       button.disabled = true;
       schedule(() => { button.disabled = false; }, 1200);
-    } else {
-      schedule(resetMissionStage, 520);
     }
+  }
+
+  function explodeStation() {
+    if (!active) return;
+    stationExploded = true;
+    explosionStartedAt = performance.now();
+    active = false;
+    spatialAudio.stop();
+    soundService.playError();
+    feedback("La station a explose. Le mot est revele.", "feedback--error");
+    const result = session.fail("timeout");
+    renderStatus(result);
+    schedule(() => {
+      finish(result);
+      const button = screen.querySelector("[data-space-restart]");
+      button.hidden = false;
+      button.disabled = true;
+      schedule(() => { button.disabled = false; }, 1200);
+    }, 1300);
   }
 
   function update(delta) {
     if (!active) return;
+    if (performance.now() >= deadline) {
+      explodeStation();
+      return;
+    }
     if (keys.has("ArrowLeft")) ship.angle -= spaceRules.rotationSpeed * delta;
     if (keys.has("ArrowRight")) ship.angle += spaceRules.rotationSpeed * delta;
-    if (keys.has("ArrowUp") || keys.has(" ")) {
+    if (keys.has("ArrowUp")) {
       ship.vx += Math.cos(ship.angle) * spaceRules.thrust * delta;
       ship.vy += Math.sin(ship.angle) * spaceRules.thrust * delta;
     }
@@ -124,9 +171,37 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       attachedStone.x = ship.x - Math.cos(ship.angle) * ropeLength;
       attachedStone.y = ship.y - Math.sin(ship.angle) * ropeLength;
     }
-    if (attachedStone) depositStone();
     cameraX = clamp(ship.x - width * 0.4, 0, world.width - width);
     spatialAudio.announce({ distance: distance(ship, base), maximumDistance: world.width * 0.62 });
+  }
+
+  function drawHud() {
+    const result = session.getState();
+    const slotWidth = 38;
+    const gap = 7;
+    const totalWidth = result.wordLength * (slotWidth + gap) - gap;
+    const startX = (width - totalWidth) / 2;
+    context.fillStyle = "rgba(8, 17, 40, 0.82)";
+    context.fillRect(14, 14, width - 28, 72);
+    context.strokeStyle = "#bfeef4";
+    context.lineWidth = 2;
+    context.strokeRect(14, 14, width - 28, 72);
+    for (let index = 0; index < result.wordLength; index += 1) {
+      const x = startX + index * (slotWidth + gap);
+      context.fillStyle = "#fffdf2";
+      context.fillRect(x, 34, slotWidth, 38);
+      context.strokeStyle = "#f7e8a5";
+      context.strokeRect(x, 34, slotWidth, 38);
+      context.fillStyle = "#172027";
+      context.font = "800 25px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(collectedLetters[index] ?? "", x + slotWidth / 2, 54);
+    }
+    context.fillStyle = "#f7e8a5";
+    context.font = "800 25px Trebuchet MS, sans-serif";
+    context.textAlign = "right";
+    context.fillText(getRemainingTime(), width - 34, 54);
   }
 
   function drawWorld(time) {
@@ -158,6 +233,31 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     context.font = "800 15px Trebuchet MS, sans-serif";
     context.textAlign = "center";
     context.fillText("BASE", base.x, base.y + 30);
+    if (stationExploded) {
+      const progress = Math.min(1, (time - explosionStartedAt) / 1300);
+      const explosionRadius = 36 + progress * 190;
+      for (let index = 0; index < 22; index += 1) {
+        const angle = index * Math.PI / 6;
+        const particleDistance = 30 + progress * (70 + (index % 4) * 35);
+        const particleRadius = 17 * (1 - progress * 0.45);
+        context.fillStyle = index % 2 ? "#f7e8a5" : "#f05f61";
+        context.beginPath();
+        context.arc(base.x + Math.cos(angle) * particleDistance, base.y - 34 + Math.sin(angle) * particleDistance, particleRadius, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.fillStyle = "#f05f61";
+      context.beginPath();
+      context.arc(base.x, base.y - 34, explosionRadius, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#ffdf6b";
+      context.beginPath();
+      context.arc(base.x, base.y - 34, explosionRadius * 0.62, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#fffdf2";
+      context.beginPath();
+      context.arc(base.x, base.y - 34, explosionRadius * 0.28, 0, Math.PI * 2);
+      context.fill();
+    }
     stones.forEach((stone) => {
       context.fillStyle = "#a78d85";
       context.beginPath();
@@ -167,10 +267,10 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       context.lineWidth = 3;
       context.stroke();
       context.fillStyle = "#fffdf2";
-      context.font = "800 29px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
+      context.font = stone.value === " " ? "800 14px Trebuchet MS, sans-serif" : "800 29px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText(stone.value, stone.x, stone.y + 2);
+      context.fillText(displayStoneValue(stone.value), stone.x, stone.y + 2);
     });
     if (attachedStone) {
       context.strokeStyle = "#f5d975";
@@ -195,13 +295,16 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     context.fillRect(-8, -7, 18, 14);
     context.restore();
     context.restore();
+    drawHud();
     if (!active) {
-      context.fillStyle = "rgba(8,17,40,0.72)";
+      context.fillStyle = "rgba(8,17,40,0.28)";
       context.fillRect(0, 0, width, height);
       context.fillStyle = "#fffdf2";
       context.font = "800 52px Arial Rounded MT Bold, Trebuchet MS, sans-serif";
       context.textAlign = "center";
-      context.fillText(session.getState().completed ? "MISSION REUSSIE" : "MISSION ECHOUEE", width / 2, height / 2);
+      if (!stationExploded || performance.now() - explosionStartedAt > 900) {
+        context.fillText(session.getState().completed ? "MISSION REUSSIE" : stationExploded ? "STATION EXPLOSEE" : "MISSION ECHOUEE", width / 2, height / 2);
+      }
     }
   }
 
@@ -214,12 +317,12 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
   }
 
   function onKeyDown(event) {
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", " "].includes(event.key)) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp"].includes(event.key)) {
       event.preventDefault();
       keys.add(event.key);
       return;
     }
-    if (Array.from(event.key).length === 1) captureStone(event.key.toLocaleUpperCase("fr-FR"));
+    if (Array.from(event.key).length === 1) captureStone(event.key === " " ? event.key : event.key.toLocaleUpperCase("fr-FR"));
   }
 
   function onKeyUp(event) {
@@ -231,10 +334,11 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       world = { width: spaceRules.worldWidth };
       base = { x: world.width / 2, y: height - 120, radius: 34 };
       ship = { x: base.x + 120, y: height - 200, vx: 0, vy: 0, angle: Math.PI };
+      deadline = performance.now() + 120000;
       screen = document.createElement("section");
       screen.className = "section-stack space-screen";
       screen.innerHTML = `
-        <section class="space-panel"><div class="panel-heading"><div><p class="eyebrow">Exploration spatiale</p><h2>Pilote, attrape, rapporte</h2></div><button class="action-button" type="button" data-space-repeat>Reecouter</button></div><div class="session-status"><span class="status-chip" data-space-errors></span></div><div class="word-slots" data-space-slots aria-label="Lettres deposees"></div><canvas class="space-canvas" width="960" height="560" aria-label="Planete et vaisseau spatial"></canvas><div class="space-controls"><button type="button" data-space-left>Tourner a gauche</button><button type="button" data-space-thrust>Propulser</button><button type="button" data-space-right>Tourner a droite</button></div><p class="feedback" data-space-feedback></p><div class="space-actions"><button class="action-button" type="button" data-space-next hidden>Mot suivant</button><button class="action-button" type="button" data-space-restart hidden>Reessayer</button></div></section>
+        <section class="space-panel"><div class="panel-heading"><div><p class="eyebrow">Exploration spatiale</p><h2>Pilote, attrape, rapporte</h2></div><button class="action-button" type="button" data-space-repeat>Reecouter</button></div><div class="session-status"><span class="status-chip" data-space-errors></span></div><canvas class="space-canvas" width="960" height="560" aria-label="Planete et vaisseau spatial"></canvas><div class="space-controls"><button type="button" data-space-left>Tourner a gauche</button><button type="button" data-space-thrust>Propulser</button><button type="button" data-space-right>Tourner a droite</button></div><p class="feedback" data-space-feedback></p><div class="space-actions"><button class="action-button" type="button" data-space-next hidden>Mot suivant</button><button class="action-button" type="button" data-space-restart hidden>Reessayer</button></div></section>
         <section class="space-debug"><p class="eyebrow">Mode developpeur</p><div class="space-levels"><button type="button" data-space-level="1">Niveau 1</button><button type="button" data-space-level="2">Niveau 2</button><button type="button" data-space-level="3">Niveau 3</button></div></section>`;
       container.append(screen);
       canvas = screen.querySelector("canvas");

@@ -1,12 +1,11 @@
 import { getExerciseRules } from "./difficulty.js";
 
 function normalizeLetter(letter) {
-  return String(letter ?? "")
-    .trim()
-    .toLocaleUpperCase("fr-FR");
+  const value = String(letter ?? "");
+  return value === " " ? value : value.trim().toLocaleUpperCase("fr-FR");
 }
 
-const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŸ".split("");
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÇÉÈÊËÎÏÔ".split("");
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
@@ -70,6 +69,26 @@ export function createExerciseSession(exercise, eventBus) {
       }
 
       return Object.freeze({ ...snapshot(), accepted: true, correct });
+    },
+    fail(reason = "timeout") {
+      if (state !== "active") return snapshot();
+      state = "failed";
+      publish("exercise:failed", { reason });
+      return snapshot();
+    },
+    createLetterField(distractorCount) {
+      if (state !== "active" || !Number.isInteger(distractorCount) || distractorCount < 1) return Object.freeze([]);
+      const values = shuffle([
+        ...letters,
+        ...Array.from({ length: distractorCount }, () => alphabet[Math.floor(Math.random() * alphabet.length)]),
+      ]);
+      const proposals = values.map((value, index) => Object.freeze({
+        id: `field-${proposalSetCount}-${index}`,
+        value,
+      }));
+      proposalSetCount += 1;
+      eventBus.emit("proposals:created", { count: proposals.length, session: snapshot() });
+      return Object.freeze(proposals);
     },
     createLetterProposals(count) {
       if (state !== "active" || !Number.isInteger(count) || count < 2) return Object.freeze([]);
