@@ -59,22 +59,23 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     attachedStone = undefined;
   }
 
-  function setGrapple() {
+  function captureStone(letter) {
     if (!active) return;
     if (attachedStone) {
-      attachedStone.attached = false;
-      attachedStone = undefined;
-      feedback("Pierre relachee.");
+      feedback("Ramene la pierre a la base.");
       return;
     }
-    const nearest = stones.find((stone) => distance(ship, stone) < spaceRules.grappleRange);
-    if (nearest) {
-      nearest.attached = true;
-      attachedStone = nearest;
+    const nearbyStones = stones.filter((stone) => distance(ship, stone) < spaceRules.grappleRange);
+    const matchingStone = nearbyStones.find((stone) => stone.value === letter);
+    if (matchingStone) {
+      matchingStone.attached = true;
+      attachedStone = matchingStone;
       feedback("Pierre accrochee. Ramene-la a la base.", "feedback--success");
       soundService.playPop();
+    } else if (nearbyStones.length) {
+      feedback("Tape la lettre ecrite sur la pierre.");
     } else {
-      feedback("Approche-toi d'une pierre pour accrocher le grappin.");
+      feedback("Approche-toi d'une pierre pour l'attraper.");
     }
   }
 
@@ -216,8 +217,9 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     if (["ArrowLeft", "ArrowRight", "ArrowUp", " "].includes(event.key)) {
       event.preventDefault();
       keys.add(event.key);
+      return;
     }
-    if (event.key.toLowerCase() === "g") setGrapple();
+    if (Array.from(event.key).length === 1) captureStone(event.key.toLocaleUpperCase("fr-FR"));
   }
 
   function onKeyUp(event) {
@@ -232,7 +234,7 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       screen = document.createElement("section");
       screen.className = "section-stack space-screen";
       screen.innerHTML = `
-        <section class="space-panel"><div class="panel-heading"><div><p class="eyebrow">Exploration spatiale</p><h2>Pilote, attrape, rapporte</h2></div><button class="action-button" type="button" data-space-repeat>Reecouter</button></div><div class="session-status"><span class="status-chip" data-space-errors></span></div><div class="word-slots" data-space-slots aria-label="Lettres deposees"></div><canvas class="space-canvas" width="960" height="560" aria-label="Planete et vaisseau spatial"></canvas><div class="space-controls"><button type="button" data-space-left>Tourner a gauche</button><button type="button" data-space-thrust>Propulser</button><button type="button" data-space-right>Tourner a droite</button><button type="button" data-space-grapple>Grappin</button></div><p class="feedback" data-space-feedback></p><div class="space-actions"><button class="action-button" type="button" data-space-next hidden>Mot suivant</button><button class="action-button" type="button" data-space-restart hidden>Reessayer</button></div></section>
+        <section class="space-panel"><div class="panel-heading"><div><p class="eyebrow">Exploration spatiale</p><h2>Pilote, attrape, rapporte</h2></div><button class="action-button" type="button" data-space-repeat>Reecouter</button></div><div class="session-status"><span class="status-chip" data-space-errors></span></div><div class="word-slots" data-space-slots aria-label="Lettres deposees"></div><canvas class="space-canvas" width="960" height="560" aria-label="Planete et vaisseau spatial"></canvas><div class="space-controls"><button type="button" data-space-left>Tourner a gauche</button><button type="button" data-space-thrust>Propulser</button><button type="button" data-space-right>Tourner a droite</button></div><p class="feedback" data-space-feedback></p><div class="space-actions"><button class="action-button" type="button" data-space-next hidden>Mot suivant</button><button class="action-button" type="button" data-space-restart hidden>Reessayer</button></div></section>
         <section class="space-debug"><p class="eyebrow">Mode developpeur</p><div class="space-levels"><button type="button" data-space-level="1">Niveau 1</button><button type="button" data-space-level="2">Niveau 2</button><button type="button" data-space-level="3">Niveau 3</button></div></section>`;
       container.append(screen);
       canvas = screen.querySelector("canvas");
@@ -240,7 +242,6 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       screen.querySelector("[data-space-repeat]").addEventListener("click", repeatWord);
       screen.querySelector("[data-space-next]").addEventListener("click", nextWord);
       screen.querySelector("[data-space-restart]").addEventListener("click", nextWord);
-      screen.querySelector("[data-space-grapple]").addEventListener("click", setGrapple);
       screen.querySelectorAll("[data-space-level]").forEach((button) => button.addEventListener("click", () => onSelectLevel(Number(button.dataset.spaceLevel))));
       [["[data-space-left]", "ArrowLeft"], ["[data-space-thrust]", "ArrowUp"], ["[data-space-right]", "ArrowRight"]].forEach(([selector, key]) => {
         const button = screen.querySelector(selector);

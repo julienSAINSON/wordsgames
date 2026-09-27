@@ -6,7 +6,7 @@ function normalizeLetter(letter) {
     .toLocaleUpperCase("fr-FR");
 }
 
-const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŸ".split("");
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);

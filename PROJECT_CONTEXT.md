@@ -56,7 +56,7 @@ Un mini-jeu recevra une `ExerciseSession` opaque et des callbacks de capacite, p
 
 ### WordProvider
 
-`createWordProvider()` charge `data/words.json` via HTTP, valide sa structure et normalise les mots pour le moteur. Il expose `getChildren()`, `getChild(childId)`, `getSeries(childId, seriesId)`, `getWords(childId, seriesId)` et `getRandomWord(childId, seriesId)`. Le controleur cree l'exercice avec le contexte `{ childId, seriesId }`; les mini-jeux ne recoivent toujours pas le mot.
+`createWordProvider()` charge `data/words.json` via HTTP, valide sa structure et conserve le libelle complet dans `original`. Il produit aussi `normalized`, sans determinant (`le`, `la`, `les`, `un`, `une`, `l'`), pour le moteur et les lettres a retrouver. Le TTS prononce `original`, determinant inclus. Il expose `getChildren()`, `getChild(childId)`, `getSeries(childId, seriesId)`, `getWords(childId, seriesId)` et `getRandomWord(childId, seriesId)`. Le controleur cree l'exercice avec le contexte `{ childId, seriesId }`; les mini-jeux ne recoivent toujours pas le mot.
 
 ## 5. Jeux existants et jeux prevus
 
@@ -76,7 +76,7 @@ Un coureur Canvas avance automatiquement vers une haie. Dans une fenetre d'appro
 
 ### Exploration spatiale
 
-Un MVP Canvas place un vaisseau inertiel sur une planete plus large que l'ecran. Le joueur tourne, propulse et utilise un grappin pour accrocher une pierre opaque; elle reste visuellement reliee au vaisseau jusqu'a son depot reel dans la base. Seul ce depot appelle `session.submitLetter(value)`. Les pierres sont regenerees par etape avec des propositions opaques, reparties alternativement a gauche et a droite de la station. La base affiche uniquement les emplacements et utilise la regle centrale d'erreurs. L'issue revele le mot au niveau du controleur, jamais dans le jeu. L'alarme periodique prononce uniquement le mot, avec un volume qui diminue selon la distance de la base.
+Un MVP Canvas place un vaisseau inertiel sur une planete plus large que l'ecran. Le joueur tourne, propulse et doit se trouver pres d'une pierre puis taper au clavier la lettre affichee pour l'accrocher; elle reste visuellement reliee au vaisseau jusqu'a son depot reel dans la base. Seul ce depot appelle `session.submitLetter(value)`. Les pierres sont regenerees par etape avec des propositions opaques, reparties alternativement a gauche et a droite de la station. La base affiche uniquement les emplacements et utilise la regle centrale d'erreurs. L'issue revele le mot au niveau du controleur, jamais dans le jeu. L'alarme periodique prononce uniquement le mot, avec un volume qui diminue selon la distance de la base.
 
 ## 6. Niveaux de difficulte
 

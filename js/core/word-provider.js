@@ -4,7 +4,8 @@ function contentError(message) {
 
 function normalizeWord(word) {
   const original = word.trim();
-  return Object.freeze({ original, normalized: original.toLocaleUpperCase("fr-FR") });
+  const normalized = original.replace(/^(?:(?:le|la|les|un|une)\s+|l['’])/iu, "");
+  return Object.freeze({ original, normalized: normalized.toLocaleUpperCase("fr-FR") });
 }
 
 function validateContent(content) {

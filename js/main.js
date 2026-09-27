@@ -90,7 +90,7 @@ function startSpace(context, level = 1) {
   activeGame?.destroy();
   const exerciseForLevel = createExercise(context, level);
   const session = engine.start(exerciseForLevel);
-  const spatialAudio = createSpatialAudio(spatialTtsService, exerciseForLevel.word);
+  const spatialAudio = createSpatialAudio(spatialTtsService, exerciseForLevel.originalWord);
   const spaceGame = createSpaceGame({
     session,
     spaceRules: getDifficulty(level).gameRules.space,
