@@ -30,6 +30,8 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
   let explosionStartedAt;
   let collectedLetters = [];
   let cameraX = 0;
+  let hullIntegrity = 100;
+  let impactProtectedUntil = 0;
   const keys = new Set();
   const timers = new Set();
 
@@ -149,6 +151,27 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     }, 1300);
   }
 
+  function damageShip(impactSpeed) {
+    if (performance.now() < impactProtectedUntil) return;
+    const damage = clamp(Math.round((impactSpeed - 55) * 0.45), 4, 45);
+    hullIntegrity = Math.max(0, hullIntegrity - damage);
+    impactProtectedUntil = performance.now() + 450;
+    soundService.playError();
+    feedback(damage >= 20 ? `Choc violent : -${damage} vie.` : `Egratignure : -${damage} vie.`, "feedback--error");
+    if (hullIntegrity === 0) {
+      active = false;
+      spatialAudio.stop();
+      feedback("Vaisseau hors service.", "feedback--error");
+      const result = session.fail("hull");
+      renderStatus(result);
+      finish(result);
+      const button = screen.querySelector("[data-space-restart]");
+      button.hidden = false;
+      button.disabled = true;
+      schedule(() => { button.disabled = false; }, 1200);
+    }
+  }
+
   function update(delta) {
     if (!active) return;
     if (performance.now() >= deadline) {
@@ -165,7 +188,15 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     ship.vx *= 0.992;
     ship.vy *= 0.992;
     ship.x = clamp(ship.x + ship.vx * delta, 25, world.width - 25);
-    ship.y = clamp(ship.y + ship.vy * delta, 60, height - 65);
+    ship.y += ship.vy * delta;
+    const groundY = height - 65;
+    if (ship.y > groundY) {
+      damageShip(Math.abs(ship.vy));
+      ship.y = groundY;
+      ship.vy = -Math.abs(ship.vy) * 0.28;
+      ship.vx *= 0.72;
+    }
+    ship.y = Math.max(60, ship.y);
     if (attachedStone) {
       const ropeLength = 58;
       attachedStone.x = ship.x - Math.cos(ship.angle) * ropeLength;
@@ -202,6 +233,14 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
     context.font = "800 25px Trebuchet MS, sans-serif";
     context.textAlign = "right";
     context.fillText(getRemainingTime(), width - 34, 54);
+    context.fillStyle = "#fffdf2";
+    context.font = "800 15px Trebuchet MS, sans-serif";
+    context.textAlign = "left";
+    context.fillText("VIE", 34, 45);
+    context.fillStyle = "#172027";
+    context.fillRect(34, 53, 112, 12);
+    context.fillStyle = hullIntegrity > 45 ? "#9bedc8" : "#f05f61";
+    context.fillRect(36, 55, 108 * hullIntegrity / 100, 8);
   }
 
   function drawWorld(time) {
@@ -334,6 +373,8 @@ export function createSpaceGame({ session, spaceRules, repeatWord, finish, nextW
       world = { width: spaceRules.worldWidth };
       base = { x: world.width / 2, y: height - 120, radius: 34 };
       ship = { x: base.x + 120, y: height - 200, vx: 0, vy: 0, angle: Math.PI };
+      hullIntegrity = 100;
+      impactProtectedUntil = 0;
       deadline = performance.now() + 120000;
       screen = document.createElement("section");
       screen.className = "section-stack space-screen";
